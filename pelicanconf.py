@@ -1,4 +1,4 @@
-# SITEURL = 'https://blog.coracle.social'
+SITEURL = 'https://blog.coracle.social'
 SITENAME = 'Coracle'
 SITESUBTITLE = 'A Dev Blog'
 PROFILE_IMAGE = 'logo-square.png'
