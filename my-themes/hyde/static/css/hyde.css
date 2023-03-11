@@ -285,11 +285,11 @@ a.sidebar-social-item.active:focus {
   color: #8f5536;
 }
 
-/* Dark */
-.theme-base-dark .sidebar {
-  background-color: #EB5E28;
+/* Coracle */
+.theme-base-coracle .sidebar {
+  background-color: #252422;
 }
-.theme-base-dark .content a,
-.theme-base-dark .related-posts li a:hover {
-  color: #252422;
+.theme-base-coracle .content a,
+.theme-base-coracle .related-posts li a:hover {
+  color: #EB5E28;
 }
