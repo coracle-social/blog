@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "blog"
+version = "0.1.0"
+description = "The coracle.social dev blog"
+authors = ["hodlbod"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pelican = {extras = ["markdown"], version = "^4.8.0"}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
