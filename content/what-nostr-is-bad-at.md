@@ -1,6 +1,6 @@
 Title: What Nostr is Bad At
 Date: 2023-03-10 17:35
-Category: Vision
+Category: Trade-offs
 
 Nostr is an amazingly versatile protocol, and has huge potential to solve a number of real world problems. But it isn't a silver bullet, and I think it'll be interesting to watch as the Nostr ecosystem develops and discovers problems that Nostr can't solve, and which complementary technologies fill those gaps.
 
