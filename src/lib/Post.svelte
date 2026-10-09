@@ -1,95 +1,130 @@
 <script lang="ts">
-  import insane from "insane"
-  import {marked} from "marked"
+  import type {Event} from 'nostr-tools'
+  import insane from 'insane'
+  import {marked} from 'marked'
   import {nip19} from 'nostr-tools'
-  import {fromNostrURI} from "@coracle.social/util"
-  import {subscribe} from "@coracle.social/network"
+  import {fromNostrURI} from '@coracle.social/util'
+  import {author} from './state'
+  import {
+    AUTHOR,
+    displayProfile,
+    loadAuthor,
+    getTag,
+    getSlug,
+    getPublishedAt,
+    formatDate,
+    readingTime,
+  } from './nostr'
 
-  export let post
+  export let post: Event
 
-  const {title, summary} = Object.fromEntries(post.tags)
-  const pubkeys = new Map()
+  const title = getTag(post, 'title') || 'Untitled'
+  const summary = getTag(post, 'summary')
+  const topics = post.tags.filter(t => t[0] === 't').map(t => t[1])
+  const entityRegex = /(nostr:)?n(event|ote|pub|profile|addr)1[02-9ac-hj-np-z]+/g
 
-  export const getLocale = () => new Intl.DateTimeFormat().resolvedOptions().locale
+  let image = getTag(post, 'image')
+  let names: Record<string, string> = {}
 
-  export const formatTimestampAsDate = (ts: number) => {
-    const formatter = new Intl.DateTimeFormat(getLocale(), {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
-
-    return formatter.format(new Date(ts * 1000))
-  }
-
-  const parseEntity = uri => {
-    const entity = fromNostrURI(uri)
-
-    let type, data
-
+  const decode = (uri: string) => {
     try {
-      ;({type, data} = nip19.decode(entity) as {type: string; data: any})
-    } catch (e) {}
-
-    return type ? {type, data} : null
+      return nip19.decode(fromNostrURI(uri))
+    } catch (e) {
+      return null
+    }
   }
 
-  const loadPubkey = (pubkey, relays = []) => {
-    const sub = subscribe({
-      filters: [{authors: [pubkey], kinds: [0]}],
-      relays: relays.concat(['wss://purplepag.es', 'wss://relay.damus.io', 'wss://relay.nostr.band']),
+  const getMentionedPubkey = (entity: ReturnType<typeof decode>) => {
+    if (entity?.type === 'npub') return {pubkey: entity.data, relays: []}
+    if (entity?.type === 'nprofile') return {pubkey: entity.data.pubkey, relays: entity.data.relays || []}
+  }
+
+  const render = (content: string, names: Record<string, string>) => {
+    const markdown = content.replace(entityRegex, (uri, _, __, offset) => {
+      const url = `https://coracle.social/${fromNostrURI(uri)}`
+      const before = content[offset - 1]
+
+      // Already a link target, or part of a longer url
+      if (before === '(') return url
+      if (before === '/') return uri
+
+      const pubkey = getMentionedPubkey(decode(uri))?.pubkey
+      const display = pubkey && names[pubkey] ? `@${names[pubkey]}` : fromNostrURI(uri).slice(0, 16) + '…'
+
+      return `[${display}](${url})`
     })
 
-    sub.emitter.on('event', (url, e) => {
-      try {
-        const content = JSON.parse(e.content)
+    return insane(marked.parse(markdown) as string)
+  }
 
-        pubkeys.set(e.pubkey, content.name || content.display_name)
-      } catch (e) {}
+  for (const uri of post.content.match(entityRegex) || []) {
+    const mention = getMentionedPubkey(decode(uri))
 
-      html = renderMarkdown()
+    if (mention && !names[mention.pubkey]) {
+      loadAuthor(mention.pubkey, mention.relays).then(({profile}) => {
+        names = {...names, [mention.pubkey]: displayProfile(profile, mention.pubkey)}
+      })
+    }
+  }
+
+  $: html = render(post.content, names)
+  $: name = displayProfile($author.profile, AUTHOR)
+  $: discussUrl =
+    'https://coracle.social/' +
+    nip19.naddrEncode({
+      kind: post.kind,
+      pubkey: post.pubkey,
+      identifier: getSlug(post),
+      relays: $author.relays.slice(0, 3),
     })
-  }
-
-  const renderMarkdown = () => {
-    const regex = /(nostr:)?n(event|ote|pub|profile|addr)\w{10,1000}/g
-
-    let markdown = post.content
-    for (const uri of post.content.match(regex) || []) {
-      const entity = parseEntity(uri)
-
-      let display = uri.slice(0, 16) + "..."
-      if (entity?.type === "npub" && pubkeys.has(entity.data.pubkey)) {
-        display = "@" + pubkeys.get(entity.data)
-      } else if (entity?.type === "nprofile" && pubkeys.has(entity.data.pubkey)) {
-        display = "@" + pubkeys.get(entity.data.pubkey)
-      }
-
-      markdown = markdown.replace(uri, `[${display}](https://coracle.social/${uri})`)
-    }
-
-    return insane(marked.parse(markdown))
-  }
-
-  let html = renderMarkdown()
-
-  for (const uri of post.content.match(/(nostr:)?n(pub|profile)\w{10,1000}/g) || []) {
-    const entity = parseEntity(uri)
-
-    if (entity?.type === "npub") {
-      loadPubkey(entity.data)
-    }
-
-    if (entity?.type === "nprofile") {
-      loadPubkey(entity.data.pubkey, entity.data.relays)
-    }
-  }
 </script>
 
-<div>
-  <h3 class="text-3xl mt-4">{title}</h3>
-  <span class="text-gray-600 text-sm">{formatTimestampAsDate(post.created_at)}</span>
-</div>
-<div class="long-form-content flex flex-col gap-4 overflow-hidden text-ellipsis leading-6">
-  {@html html}
-</div>
+<article class="mt-6 sm:mt-12">
+  <header class="max-w-2xl mx-auto text-center">
+    {#if topics.length > 0}
+      <div class="flex flex-wrap justify-center gap-2 mb-5">
+        {#each topics.slice(0, 4) as topic}
+          <span class="text-xs uppercase tracking-widest text-accent">#{topic}</span>
+        {/each}
+      </div>
+    {/if}
+    <h1 class="font-serif text-4xl sm:text-6xl leading-[1.1] tracking-tight">{title}</h1>
+    {#if summary}
+      <p class="mt-5 text-left text-base text-stone-600 dark:text-stone-400">{summary}</p>
+    {/if}
+    <div class="mt-6 flex items-center justify-center gap-3 text-sm text-stone-500">
+      {#if $author.profile.picture}
+        <img class="w-9 h-9 rounded-full object-cover" src={$author.profile.picture} alt="" />
+      {/if}
+      <div class="text-left">
+        <div class="text-stone-900 dark:text-stone-100 font-medium">{name}</div>
+        <div>{formatDate(getPublishedAt(post))} · {readingTime(post.content)} min read</div>
+      </div>
+    </div>
+  </header>
+
+  {#if image}
+    <img
+      src={image}
+      alt=""
+      on:error={() => (image = undefined)}
+      class="mt-10 sm:mt-14 w-full max-h-[32rem] object-cover rounded-2xl shadow-lg" />
+  {/if}
+
+  <div
+    class="prose prose-stone dark:prose-invert prose-lg max-w-2xl mx-auto mt-10 sm:mt-14 break-words
+      prose-headings:font-serif prose-headings:font-normal prose-a:text-accent prose-img:rounded-xl">
+    {@html html}
+  </div>
+
+  <div class="max-w-2xl mx-auto mt-16 pt-8 border-t border-stone-200 dark:border-stone-800 flex flex-wrap gap-4 justify-between items-center">
+    <a href="/" class="text-stone-500 hover:text-accent transition-colors">← All posts</a>
+    <a
+      href={discussUrl}
+      target="_blank"
+      rel="noreferrer"
+      class="px-4 py-2 rounded-full bg-accent text-white text-sm hover:opacity-90 transition-opacity">
+      Discuss on Coracle
+    </a>
+  </div>
+</article>

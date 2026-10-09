@@ -1,47 +1,37 @@
-# Svelte + TS + Vite
+# Hodlbod's Blog
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+A small single-page blog that reads long-form posts ([NIP-23](https://github.com/nostr-protocol/nips/blob/master/23.md), kind `30023`) from nostr. There is no backend; the browser fetches posts directly from the author's relays.
 
-## Recommended IDE Setup
+## How it loads posts
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+The blog uses the outbox model ([NIP-65](https://github.com/nostr-protocol/nips/blob/master/65.md)). It asks the indexer relays `wss://indexer.coracle.social` and `wss://purplepag.es` for the author's relay list (kind `10002`), then fetches posts and the profile (kind `0`) from the relays the author writes to. An author without a relay list is read from the indexers.
 
-## Need an official Svelte framework?
+Profiles of people mentioned in a post (`npub` or `nprofile`) are resolved the same way, including any relay hints in the `nprofile`.
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+Nostr code lives in `src/lib/nostr.ts`. App state and routing live in `src/lib/state.ts`.
 
-## Technical considerations
+## Pages
 
-**Why use this over SvelteKit?**
+- `/` lists every post. The newest one is shown as a large banner card and the rest in a grid.
+- `/p/<slug>` shows a single post. The slug is the post's `d` tag. Older links that use an event id or a `30023:<pubkey>:<d>` address still work.
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+Banner images come from the post's `image` tag. Dates come from `published_at`, or `created_at` if that tag is missing.
 
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+## Using it for another author
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+Set `AUTHOR` in `src/lib/nostr.ts` to the author's hex pubkey, and change the `<title>` in `index.html`. The header's name, avatar and bio come from the author's nostr profile.
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+## Development
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
-
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
+```sh
+pnpm install
+pnpm dev    # http://localhost:8293
+pnpm check  # svelte-check type checking
+pnpm build  # static output in dist/
 ```
+
+Built with Svelte 4, Vite, Tailwind (with `@tailwindcss/typography`), and the `@coracle.social` network libraries.
+
+## Deploying
+
+`dist/` is a static site. Because routing happens in the browser, the server has to send `index.html` for every path that isn't a file (for example `try_files $uri /index.html` in nginx).
